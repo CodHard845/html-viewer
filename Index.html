@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Éditeur HTML Unifié</title>
+    <style>
+        :root {
+            --bg-dark: #1e1e1e;
+            --bg-editor: #252526;
+            --bg-sidebar: #252526;
+            --border: #3e3e42;
+            --accent: #007acc;
+            --text-main: #d4d4d4;
+            --danger: #ce3a3a;
+            --font-code: 'Consolas', 'Monaco', 'Courier New', monospace;
+            --font-ui: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-ui);
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* HEADER */
+        header {
+            height: 40px;
+            background-color: #333333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 15px;
+            border-bottom: 1px solid var(--border);
+            z-index: 20;
+            flex-shrink: 0;
+        }
+        .logo { font-size: 0.9rem; font-weight: 600; }
+
+        .menu-btn {
+            background: none; border: none; color: var(--text-main); cursor: pointer;
+            padding: 5px; border-radius: 4px;
+        }
+        .menu-btn:hover { background-color: rgba(255,255,255,0.1); }
+
+        /* MAIN */
+        main {
+            display: flex;
+            flex: 1; /* Prend l'espace restant */
+            height: calc(100vh - 40px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* EDITOR SECTION */
+        .editor-container {
+            width: 50%;
+            border-right: 1px solid var(--border);
+            background-color: var(--bg-editor);
+            display: flex;
+            flex-direction: column;
+            /* Transition fluide pour le mode plein écran */
+            transition: width 0.3s ease-in-out, border 0.3s;
+            overflow: hidden;
+            white-space: nowrap; /* Évite le wrapping during animation */
+        }
+
+        .editor-label {
+            padding: 5px 15px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            background: #2d2d2d;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-editor);
+            color: #d4d4d4;
+            border: none;
+            resize: none;
+            padding: 20px;
+            font-family: var(--font-code);
+            font-size: 14px;
+            line-height: 1.5;
+            outline: none;
+        }
+
+        /* PREVIEW SECTION */
+        .preview-container {
+            width: 50%;
+            background-color: white;
+            display: flex;
+            flex-direction: column;
+            /* Transition fluide */
+            transition: width 0.3s ease-in-out;
+        }
+        
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* MODE PLEIN ÉCRAN (LOGIQUE CSS) */
+        /* Quand le body a la classe 'full-preview' */
+        body.full-preview .editor-container {
+            width: 0;
+            border: none;
+            opacity: 0;
+        }
+
+        body.full-preview .preview-container {
+            width: 100%;
+        }
+
+        /* SIDEBAR MENU */
+        .sidebar {
+            position: fixed;
+            top: 40px;
+            right: 0;
+            width: 280px; /* Un peu plus large pour les textes */
+            height: calc(100% - 40px);
+            background-color: var(--bg-sidebar);
+            border-left: 1px solid var(--border);
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            z-index: 100;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: -5px 0 15px rgba(0,0,0,0.5);
+        }
+        .sidebar.open { transform: translateX(0); }
+
+        .sidebar-header {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .action-btn {
+            background-color: #3c3c3c;
+            border: 1px solid transparent;
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.9rem;
+            transition: 0.2s;
+            width: 100%;
+        }
+        .action-btn:hover { background-color: #4a4a4a; }
+        .action-btn svg { min-width: 18px; width: 18px; height: 18px; }
+
+        .btn-danger { color: #ff8888; }
+        .btn-danger:hover { background-color: var(--danger); color: white; }
+        .btn-danger.confirm-state {
+            background-color: var(--danger);
+            animation: pulse 1s infinite;
+        }
+
+        .btn-primary {
+            border-left: 3px solid var(--accent);
+        }
+
+        /* OVERLAY */
+        .overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 90;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .overlay.visible { opacity: 1; pointer-events: auto; }
+
+        /* TOAST */
+        .toast {
+            position: fixed; bottom: 30px; left: 50%;
+            transform: translateX(-50%) translateY(50px);
+            background: #333; color: white; padding: 10px 20px;
+            border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+            opacity: 0; transition: 0.3s; z-index: 200; font-size: 0.9rem;
+        }
+        .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.8; } 100% { opacity: 1; } }
+
+        /* RESPONSIVE */
+        @media (max-width: 768px) {
+            main { flex-direction: column; }
+            .editor-container, .preview-container { width: 100%; height: 50%; }
+            /* Sur mobile en mode plein écran, l'editor prend 0 de hauteur */
+            body.full-preview .editor-container { height: 0; border: none; }
+            body.full-preview .preview-container { height: 100%; }
+            .sidebar { width: 85%; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">Éditeur Web</div>
+        <button class="menu-btn" title="Menu & Actions" onclick="toggleMenu()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+    </header>
+
+    <div id="overlay" class="overlay" onclick="toggleMenu()"></div>
+
+    <div id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <span>Actions</span>
+            <div style="cursor:pointer" onclick="toggleMenu()">✕</div>
+        </div>
+
+        <!-- NOUVEAU BOUTON MODE PLEIN ÉCRAN -->
+        <button class="action-btn btn-primary" onclick="toggleViewMode()">
+            <svg id="viewIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+            <span id="viewText">Mode Plein Écran (Aperçu)</span>
+        </button>
+
+        <button class="action-btn" onclick="updatePreview()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            Rafraîchir
+        </button>
+
+        <button id="clearBtn" class="action-btn btn-danger" onclick="handleClear()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            <span id="clearText">Tout supprimer</span>
+        </button>
+    </div>
+
+    <main>
+        <div class="editor-container">
+            <div class="editor-label">Code source (HTML + CSS + JS)</div>
+            <textarea id="full-code" spellcheck="false"></textarea>
+        </div>
+        <div class="preview-container">
+            <iframe id="preview-frame"></iframe>
+        </div>
+    </main>
+
+    <div id="toast" class="toast">Message</div>
+
+    <script>
+        const fullCode = document.getElementById('full-code');
+        const previewFrame = document.getElementById('preview-frame');
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('overlay');
+        const clearBtn = document.getElementById('clearBtn');
+        const clearText = document.getElementById('clearText');
+        const viewText = document.getElementById('viewText');
+        const viewIcon = document.getElementById('viewIcon');
+        
+        let clearConfirmTimeout;
+
+        // Template par défaut
+        const defaultCode = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            padding: 3rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 600px;
+        }
+        h1 { color: #333; }
+        p { color: #666; line-height: 1.6; }
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin-top: 20px;
+            transition: transform 0.2s;
+        }
+        button:hover { transform: scale(1.05); }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Mode Présentation Activé</h1>
+        <p>Cliquez sur le menu en haut à droite, puis "Retour au code" pour modifier ce fichier.</p>
+        <button onclick="console.log('Clic !')">Cliquez-moi</button>
+    </div>
+
+    <script>
+        console.log('Page chargée avec succès');
+    <\/script>
+</body>
+</html>`;
+
+        // Chargement
+        function loadCode() {
+            fullCode.value = localStorage.getItem('unified_code') || defaultCode;
+            updatePreview();
+        }
+
+        function saveCode() {
+            localStorage.setItem('unified_code', fullCode.value);
+        }
+
+        // Preview
+        function updatePreview() {
+            saveCode();
+            // Optionnel: Fermer le menu si on clique sur rafraîchir, 
+            // mais on peut vouloir cliquer plusieurs fois donc on ne ferme pas forcément.
+            // Si on est en mode edition, on laisse ouvert.
+            
+            const doc = previewFrame.contentDocument || previewFrame.contentWindow.document;
+            doc.open();
+            doc.write(fullCode.value);
+            doc.close();
+        }
+
+        // Toggle Sidebar
+        function toggleMenu() {
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('visible');
+        }
+
+        // Toggle Mode Plein Écran
+        function toggleViewMode() {
+            document.body.classList.toggle('full-preview');
+            const isFull = document.body.classList.contains('full-preview');
+            
+            // Mettre à jour le texte du bouton
+            if (isFull) {
+                viewText.textContent = "Retour au code (Édition)";
+                // Changer l'icône pour un crayon ou une flèche retour
+                viewIcon.innerHTML = '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>';
+            } else {
+                viewText.textContent = "Mode Plein Écran (Aperçu)";
+                // Remettre l'icône plein écran
+                viewIcon.innerHTML = '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>';
+            }
+
+            // On peut fermer le menu automatiquement pour profiter de la vue
+            toggleMenu(); 
+            
+            // Petit délai pour s'assurer que le redimensionnement est bien pris en compte par l'iframe
+            setTimeout(() => {
+                // L'iframe se redimensionne toute seule via CSS, 
+                // mais parfois les éléments internes ont besoin d'un coup de pouce JS si c'était du canvas ou svg complexe.
+                // Ici le CSS width: 100% suffit généralement.
+            }, 300);
+        }
+
+        // Suppression
+        function handleClear() {
+            if (clearBtn.classList.contains('confirm-state')) {
+                fullCode.value = '';
+                localStorage.removeItem('unified_code');
+                updatePreview();
+                showToast("Code effacé");
+                resetClearState();
+            } else {
+                clearBtn.classList.add('confirm-state');
+                clearText.textContent = "Êtes-vous sûr ?";
+                clearTimeout(clearConfirmTimeout);
+                clearConfirmTimeout = setTimeout(resetClearState, 3000);
+            }
+        }
+
+        function resetClearState() {
+            clearBtn.classList.remove('confirm-state');
+            clearText.textContent = "Tout supprimer";
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2000);
+        }
+
+        // Input handling
+        fullCode.addEventListener('input', () => {
+            clearTimeout(window.debounce);
+            window.debounce = setTimeout(updatePreview, 800);
+        });
+
+        fullCode.addEventListener('keydown', function(e) {
+            if(e.key === 'Tab') {
+                e.preventDefault();
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                this.value = this.value.substring(0, start) + "  " + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + 2;
+                updatePreview();
+            }
+        });
+
+        window.onload = loadCode;
+    </script>
+</body>
+</html>
